@@ -4,6 +4,8 @@
 
 This file applies to the entire repository. More specific `AGENTS.md` files override it for their subtree.
 
+If `AGENTS.local.md` exists at the repository root, read it before performing live development or deployment. It contains private machine-specific facts and must remain untracked; never copy its contents into commits, PRs, issues, logs, or public documentation.
+
 Before changing code, inspect the relevant implementation, its tests, and any public documentation affected by the behavior. Do not infer cross-platform behavior from one platform implementation.
 
 ## Repository identity
