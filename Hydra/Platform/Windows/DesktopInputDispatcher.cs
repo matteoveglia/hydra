@@ -40,6 +40,7 @@ internal sealed class DesktopInputDispatcher : IDisposable
     private readonly BlockingCollection<InputCommand> _queue = [];
     private readonly Timer _pollTimer;
     private readonly Timer _relativeRestoreTimer;
+    private readonly Lock _desktopLock = new();
     private Thread? _workerThread;
     private nint _activeDesktop;
     private string _activeDesktopName;
@@ -72,14 +73,13 @@ internal sealed class DesktopInputDispatcher : IDisposable
             _log.LogInformation("Desktop input dispatcher started, current desktop: {Name}", _activeDesktopName);
         StartWorker(_activeDesktop);
         _pollTimer = new Timer(_ => PollDesktop(), null, TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(200));
-        _relativeRestoreTimer = new Timer(_ => _queue.TryAdd(new RestoreMouseSettingsCommand()), null,
+        _relativeRestoreTimer = new Timer(_ => TryQueue(new RestoreMouseSettingsCommand()), null,
             Timeout.Infinite, Timeout.Infinite);
     }
 
     internal void Dispatch(InputCommand cmd)
     {
-        if (!_disposed)
-            _queue.TryAdd(cmd);
+        TryQueue(cmd);
     }
 
     public void Dispose()
@@ -87,15 +87,25 @@ internal sealed class DesktopInputDispatcher : IDisposable
         if (!_disposed.TrySet()) return;
         _pollTimer.Dispose();
         _relativeRestoreTimer.Dispose();
-        _queue.TryAdd(new RestoreMouseSettingsCommand(Force: true));
+        TryQueue(new RestoreMouseSettingsCommand(Force: true), duringDispose: true);
         _queue.CompleteAdding();
-        _workerThread?.Join(TimeSpan.FromSeconds(1));
+        _workerThread?.Join();
         _workerThread = null;
-        if (_activeDesktop != nint.Zero)
+        lock (_desktopLock)
         {
-            NativeMethods.CloseDesktop(_activeDesktop);
-            _activeDesktop = nint.Zero;
+            if (_activeDesktop != nint.Zero)
+            {
+                NativeMethods.CloseDesktop(_activeDesktop);
+                _activeDesktop = nint.Zero;
+            }
         }
+    }
+
+    private bool TryQueue(InputCommand command, bool duringDispose = false)
+    {
+        if (!duringDispose && _disposed) return false;
+        try { return _queue.TryAdd(command); }
+        catch (InvalidOperationException) { return false; }
     }
 
     private void StartWorker(nint hDesk)
@@ -129,20 +139,35 @@ internal sealed class DesktopInputDispatcher : IDisposable
         }
 
         var name = GetDesktopName(hDesk);
-        if (name == _activeDesktopName)
+        lock (_desktopLock)
         {
-            NativeMethods.CloseDesktop(hDesk);
-            return;
+            if (_disposed)
+            {
+                NativeMethods.CloseDesktop(hDesk);
+                return;
+            }
+
+            if (name == _activeDesktopName)
+            {
+                NativeMethods.CloseDesktop(hDesk);
+                return;
+            }
+
+            _log.LogInformation("Input desktop changed: {Old} → {New}", _activeDesktopName, name);
+
+            var oldDesk = _activeDesktop;
+
+            // Re-attach the worker thread to the new desktop; close the old handle after it detaches.
+            // If shutdown closed the queue between the checks, retain the old active handle and close
+            // the newly-opened one here instead of leaking it.
+            if (!TryQueue(new SwitchDesktopCommand(hDesk, oldDesk, name)))
+            {
+                NativeMethods.CloseDesktop(hDesk);
+                return;
+            }
+            _activeDesktop = hDesk;
+            _activeDesktopName = name;
         }
-
-        _log.LogInformation("Input desktop changed: {Old} → {New}", _activeDesktopName, name);
-
-        var oldDesk = _activeDesktop;
-        _activeDesktop = hDesk;
-        _activeDesktopName = name;
-
-        // re-attach the worker thread to the new desktop; close old handle after the thread detaches
-        _queue.TryAdd(new SwitchDesktopCommand(hDesk, oldDesk, name));
     }
 
     private void Execute(InputCommand cmd)
