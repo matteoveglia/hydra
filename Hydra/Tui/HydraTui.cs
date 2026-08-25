@@ -129,7 +129,7 @@ internal static class HydraTui
         internal void Build()
         {
             window.Add(_connection, _activity);
-            var navigation = new View { X = 1, Y = 1, Width = Dim.Fill(), Height = 2 };
+            var navigation = new View { X = 1, Y = 2, Width = Dim.Fill(), Height = 2 };
             var contents = new[]
             {
                 ("Overview", BuildOverviewTab()),
@@ -156,7 +156,7 @@ internal static class HydraTui
                 navigation.Add(button);
                 var content = contents[index].Item2;
                 content.X = 0;
-                content.Y = 3;
+                content.Y = 4;
                 content.Width = Dim.Fill();
                 content.Height = Dim.Fill(4);
                 content.Visible = false;
