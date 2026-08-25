@@ -4,6 +4,7 @@ public interface IRelaySender
 {
     bool IsConnected { get; }
     void Send(string[] targetHosts, byte[] payload);
+    bool RequestReconnect() => false;
     ValueTask SendReliableAsync(string[] targetHosts, byte[] payload, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();

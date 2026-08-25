@@ -19,6 +19,8 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
 {
     private IStyxServer? _server;
     private RelayEncryption? _encryption;
+    private readonly Lock _connectionLock = new();
+    private CancellationTokenSource? _connectionCancellation;
 
     // One ordered outbound queue preserves key/control ordering. Bulk producers use SendReliableAsync and
     // wait until their item has actually left the queue, so a file compressor cannot retain thousands of
@@ -49,6 +51,16 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
         OnSent(targetHosts, payload);
         if (_server == null || _encryption == null) return;
         _sendQueue.Writer.TryWrite(new OutboundMessage(targetHosts, payload, null, CancellationToken.None));
+    }
+
+    public bool RequestReconnect()
+    {
+        lock (_connectionLock)
+        {
+            if (_connectionCancellation == null || _connectionCancellation.IsCancellationRequested) return false;
+            _connectionCancellation.Cancel();
+            return true;
+        }
     }
 
     public async ValueTask SendReliableAsync(string[] targetHosts, byte[] payload, CancellationToken cancel = default)
@@ -217,6 +229,7 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
     private async Task Connect(NetworkConfig netConfig, string hostName, CancellationToken cancel)
     {
         using var disco = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        using var connectionScope = new ConnectionCancellationScope(this, disco);
 
         await using var con = new HubConnectionBuilder()
             .WithUrl($"{netConfig.StyxServer}/relay", ConfigureHubUrl)
@@ -327,6 +340,26 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
                 item.Completion?.TrySetException(ex);
                 log.LogWarning(ex, "Failed to send relay message to [{TargetHosts}]", string.Join(", ", item.Targets));
             }
+        }
+    }
+
+    private sealed class ConnectionCancellationScope : IDisposable
+    {
+        private readonly RelayConnection _owner;
+        private readonly CancellationTokenSource _cancellation;
+
+        internal ConnectionCancellationScope(RelayConnection owner, CancellationTokenSource cancellation)
+        {
+            _owner = owner;
+            _cancellation = cancellation;
+            lock (_owner._connectionLock) _owner._connectionCancellation = cancellation;
+        }
+
+        public void Dispose()
+        {
+            lock (_owner._connectionLock)
+                if (ReferenceEquals(_owner._connectionCancellation, _cancellation))
+                    _owner._connectionCancellation = null;
         }
     }
 
