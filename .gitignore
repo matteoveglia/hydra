@@ -148,6 +148,10 @@ CLAUDE.md
 
 # local config
 Hydra/hydra.conf
+**/.hydra-management.json
+**/.hydra-management.lock
+**/.hydra-remote-apply.json
+**/.hydra-remote-backup.conf
 
 # machine-local coding and deployment notes
 AGENTS.local.md
