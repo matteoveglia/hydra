@@ -1,10 +1,10 @@
 # Cross-platform Hydra TUI plan
 
-Status: proposed
+Status: initial implementation complete on `codex/tui`; broader platform validation pending
 
 Date assessed: 2026-08-23
 
-Scope: architecture and implementation plan only; no TUI or runtime-control code has been implemented
+Scope: architecture record and roadmap. The first implementation includes the local management transport, status/log/config services, relay reconnect, restart, offline configuration editing, and the Terminal.Gui client. Later roadmap items remain explicitly marked by their phase.
 
 ## Executive decision
 
@@ -77,7 +77,7 @@ The linked [awesome-tuis library catalogue](https://github.com/rothgar/awesome-t
 
 Terminal.Gui's MIT license is compatible with distribution in Hydra. The dependency must be referenced only by the executable and pinned exactly; no floating prerelease should enter the release build.
 
-For the management protocol, use [Microsoft StreamJsonRpc](https://github.com/microsoft/vs-streamjsonrpc) over a `Stream`. It provides versioned request/response methods, notifications/events, cancellation, and proxy generation without opening a TCP port. Hide it behind `IManagementClient` and `IManagementServer` so it is replaceable. Pin it to an exact stable version after the IPC spike.
+The IPC spike selected a small length-prefixed JSON request/response protocol over a `Stream` instead of StreamJsonRpc. It keeps the management boundary dependency-free, enforces a 2 MiB frame limit before allocation, and avoids introducing another MessagePack-related dependency beside Hydra's relay stack. The protocol remains isolated behind `ManagementClient` and `ManagementServer` so notification support or a different framing implementation can be added without coupling Terminal.Gui to transport details.
 
 ## Target architecture
 

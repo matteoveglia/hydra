@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Http.Connections.Client;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using TypedSignalR.Client;
@@ -19,6 +21,14 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
 {
     private IStyxServer? _server;
     private RelayEncryption? _encryption;
+    private readonly Lock _connectionLock = new();
+    private CancellationTokenSource? _connectionCancellation;
+    private RelayTransportSnapshot? _transport;
+    private long _connectionAttempts;
+    private long _messagesSent;
+    private long _messagesReceived;
+    private long _bytesSent;
+    private long _bytesReceived;
 
     // One ordered outbound queue preserves key/control ordering. Bulk producers use SendReliableAsync and
     // wait until their item has actually left the queue, so a file compressor cannot retain thousands of
@@ -40,6 +50,21 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
 
     // IRelaySender
     public bool IsConnected => _server != null;
+    public RelayTransportSnapshot? Transport
+    {
+        get
+        {
+            var transport = _transport;
+            return transport == null ? null : transport with
+            {
+                ConnectionAttempts = Interlocked.Read(ref _connectionAttempts),
+                MessagesSent = Interlocked.Read(ref _messagesSent),
+                MessagesReceived = Interlocked.Read(ref _messagesReceived),
+                BytesSent = Interlocked.Read(ref _bytesSent),
+                BytesReceived = Interlocked.Read(ref _bytesReceived)
+            };
+        }
+    }
     public event Func<string[], Task>? PeersChanged;
     public event Func<string, MessageKind, ReadOnlyMemory<byte>, Task>? MessageReceived;
     public event Func<Task>? Disconnected;
@@ -49,6 +74,16 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
         OnSent(targetHosts, payload);
         if (_server == null || _encryption == null) return;
         _sendQueue.Writer.TryWrite(new OutboundMessage(targetHosts, payload, null, CancellationToken.None));
+    }
+
+    public bool RequestReconnect()
+    {
+        lock (_connectionLock)
+        {
+            if (_connectionCancellation == null || _connectionCancellation.IsCancellationRequested) return false;
+            _connectionCancellation.Cancel();
+            return true;
+        }
     }
 
     public async ValueTask SendReliableAsync(string[] targetHosts, byte[] payload, CancellationToken cancel = default)
@@ -71,6 +106,9 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
     public async Task Receive(string sourceHost, string sourceIp, byte[] payload)
     {
         if (_encryption == null) return;
+
+        Interlocked.Increment(ref _messagesReceived);
+        Interlocked.Add(ref _bytesReceived, payload.LongLength);
 
         byte[] decrypted;
         try
@@ -137,8 +175,8 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
         {
             ConnectCallback = async (ctx, cancel) =>
             {
-                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-                await socket.ConnectAsync(ctx.DnsEndPoint, cancel);
+                var socket = await RelaySocketConnector.ConnectAsync(ctx.DnsEndPoint, cancel);
+                CaptureTransport(socket, ctx.DnsEndPoint);
                 return new NetworkStream(socket, ownsSocket: true);
             }
         };
@@ -164,6 +202,7 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
 
         while (!cancel.IsCancellationRequested)
         {
+            Interlocked.Increment(ref _connectionAttempts);
             try
             {
                 await Connect(netConfig, hostName, cancel);
@@ -189,6 +228,7 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
                 var wasConnected = _server != null;
                 _server = null;
                 _encryption = null;
+                _transport = null;
                 while (_sendQueue.Reader.TryRead(out var stale))
                     stale.Completion?.TrySetException(new IOException("Relay connection lost before message was sent"));
                 if (wasConnected)
@@ -217,6 +257,7 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
     private async Task Connect(NetworkConfig netConfig, string hostName, CancellationToken cancel)
     {
         using var disco = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        using var connectionScope = new ConnectionCancellationScope(this, disco);
 
         await using var con = new HubConnectionBuilder()
             .WithUrl($"{netConfig.StyxServer}/relay", ConfigureHubUrl)
@@ -310,6 +351,8 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
             {
                 var encrypted = await _encryption.Encrypt(item.Payload, cancel);
                 await _server.Send(item.Targets, encrypted);
+                Interlocked.Increment(ref _messagesSent);
+                Interlocked.Add(ref _bytesSent, encrypted.LongLength);
                 item.Completion?.TrySetResult();
             }
             catch (OperationCanceledException ex)
@@ -327,6 +370,77 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
                 item.Completion?.TrySetException(ex);
                 log.LogWarning(ex, "Failed to send relay message to [{TargetHosts}]", string.Join(", ", item.Targets));
             }
+        }
+    }
+
+    private void CaptureTransport(Socket socket, DnsEndPoint target)
+    {
+        if (socket.LocalEndPoint is not IPEndPoint local || socket.RemoteEndPoint is not IPEndPoint remote) return;
+        var network = FindInterface(local.Address);
+        _transport = new RelayTransportSnapshot(
+            network?.Name ?? "unknown",
+            DescribeInterface(network),
+            local.Address.ToString(),
+            local.Port,
+            target.Host,
+            remote.Address.ToString(),
+            remote.Port,
+            DateTimeOffset.UtcNow,
+            Interlocked.Read(ref _connectionAttempts),
+            Interlocked.Read(ref _messagesSent),
+            Interlocked.Read(ref _messagesReceived),
+            Interlocked.Read(ref _bytesSent),
+            Interlocked.Read(ref _bytesReceived));
+    }
+
+    private static NetworkInterface? FindInterface(IPAddress address)
+    {
+        var normalized = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+        try
+        {
+            return NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(network =>
+                network.GetIPProperties().UnicastAddresses.Any(unicast =>
+                {
+                    var candidate = unicast.Address.IsIPv4MappedToIPv6 ? unicast.Address.MapToIPv4() : unicast.Address;
+                    return candidate.Equals(normalized);
+                }));
+        }
+        catch (NetworkInformationException)
+        {
+            return null;
+        }
+    }
+
+    private static string DescribeInterface(NetworkInterface? network) => network?.NetworkInterfaceType switch
+    {
+        NetworkInterfaceType.Wireless80211 => "Wi-Fi",
+        NetworkInterfaceType.Ethernet or NetworkInterfaceType.Ethernet3Megabit
+            or NetworkInterfaceType.FastEthernetFx or NetworkInterfaceType.FastEthernetT
+            or NetworkInterfaceType.GigabitEthernet => "Ethernet",
+        NetworkInterfaceType.Tunnel => "VPN / tunnel",
+        NetworkInterfaceType.Loopback => "loopback",
+        NetworkInterfaceType.Ppp => "PPP",
+        null => "unknown",
+        _ => network.NetworkInterfaceType.ToString()
+    };
+
+    private sealed class ConnectionCancellationScope : IDisposable
+    {
+        private readonly RelayConnection _owner;
+        private readonly CancellationTokenSource _cancellation;
+
+        internal ConnectionCancellationScope(RelayConnection owner, CancellationTokenSource cancellation)
+        {
+            _owner = owner;
+            _cancellation = cancellation;
+            lock (_owner._connectionLock) _owner._connectionCancellation = cancellation;
+        }
+
+        public void Dispose()
+        {
+            lock (_owner._connectionLock)
+                if (ReferenceEquals(_owner._connectionCancellation, _cancellation))
+                    _owner._connectionCancellation = null;
         }
     }
 

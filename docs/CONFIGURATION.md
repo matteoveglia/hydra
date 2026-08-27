@@ -6,6 +6,7 @@ See the [project README](../README.md) for installation and a quick-start guide.
 
 - [Requirements](#requirements)
 - [Config file location](#config-file-location)
+- [Terminal control center](#terminal-control-center)
 - [Config fields](#config-fields)
 - [Screen layout](#screen-layout)
 - [Dead corners](#dead-corners)
@@ -36,6 +37,25 @@ The config file is `hydra.conf`, located next to the binary. Set the `CONFIG` en
 ```bash
 CONFIG=/path/to/hydra.conf ./hydra
 ```
+
+## Terminal control center
+
+Run the TUI in a separate terminal while Hydra is running:
+
+```bash
+./hydra tui
+./hydra tui --config /path/to/hydra.conf
+```
+
+`--config` must identify the same canonical config path as the daemon you want to manage. The TUI connects through a local-only Unix socket on macOS/Linux or a restricted named pipe on Windows; it does not expose a network management port.
+
+The views provide runtime status, the exact interface and socket selected by the live relay connection, the actual inbound interface for clients of an embedded relay, relay traffic counters, known peers and screens, bounded live logs, configuration editing, diagnostics, and keyboard help. Runtime controls currently include relay reconnect and a confirmed Hydra restart. The configuration view has **Form** and **Text** modes; the active mode and form section use a persistent accent colour that is independent of keyboard or mouse focus. Form mode divides global, profile, relay, and behaviour settings into separate sections; Text mode exposes the complete JSON including hosts, neighbours, and screen definitions. Empty optional form fields show their effective inherited/default value beside the field without writing that value into the configuration. Hovering an option or moving keyboard focus to it updates the help panel at the bottom. Profile navigation is disabled at the first/last profile and when only one profile exists. Switching modes round-trips through the same document and preserves fields not shown by the form. The view uses Hydra's canonical parser and validator, detects external file changes, and writes through a validated sibling temporary file before replacing the original. **Save** changes the file only; **Save & Restart** also asks the running daemon to restart. Accepted save, reconnect, and restart actions report progress and completion in the bottom activity line instead of blocking the refreshed UI behind a success dialog.
+
+When a relay hostname resolves to addresses reachable through more than one interface, Hydra tries addresses in the operating system's configured network preference order before falling back to the remaining addresses. It follows Network Service Order on macOS, connected-interface metrics on Windows, and default-route metrics on Linux. If preference discovery is unavailable, Hydra preserves the resolver's address order and still attempts every resolved address.
+
+Passwords and `networkConfig` values use secret fields in Form mode and are masked by default in Text mode. Revealing them in Text mode displays the real values in the terminal, so avoid doing that in a recorded or shared session. When the daemon is unavailable, configuration read, validation, and save continue to work offline; live status and controls do not.
+
+Use `Esc` to close the TUI. Hydra continues running.
 
 ## Config fields
 
