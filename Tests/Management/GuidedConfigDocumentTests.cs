@@ -22,7 +22,7 @@ public class GuidedConfigDocumentTests
             """;
         var document = GuidedConfigDocument.Parse(json);
         var root = document.ReadRoot() with { Name = "after", AutoUpdate = false };
-        var profile = document.ReadProfile(0) with { Ssid = "Home WiFi", ScreenCount = 2, HideCursor = true, ClipboardSync = "System" };
+        var profile = document.ReadProfile(0) with { Ssid = "Home WiFi", ScreenCount = 2, HideCursor = true, UseSystemClipboard = true };
 
         document.WriteRoot(root);
         document.WriteProfile(0, profile);
@@ -59,6 +59,25 @@ public class GuidedConfigDocumentTests
         {
             Assert.That(result, Does.Not.Contain("conditions"));
             Assert.That(result, Does.Not.Contain("embeddedStyx"));
+        });
+    }
+
+    [Test]
+    public void ClipboardSyncMode_RoundTripsThroughBooleanToggle()
+    {
+        const string json = """{"profiles":[{"mode":"Master","clipboardSync":"System"},{"mode":"Master"}]}""";
+        var document = GuidedConfigDocument.Parse(json);
+
+        var system = document.ReadProfile(0);
+        var hydra = document.ReadProfile(1);
+        document.WriteProfile(0, system with { UseSystemClipboard = false });
+
+        using var parsed = System.Text.Json.JsonDocument.Parse(document.ToJson());
+        Assert.Multiple(() =>
+        {
+            Assert.That(system.UseSystemClipboard, Is.True);
+            Assert.That(hydra.UseSystemClipboard, Is.False);
+            Assert.That(parsed.RootElement.GetProperty("profiles")[0].GetProperty("clipboardSync").GetString(), Is.EqualTo("Hydra"));
         });
     }
 

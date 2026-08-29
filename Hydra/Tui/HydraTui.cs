@@ -78,7 +78,7 @@ internal static class HydraTui
         private readonly Editor _config = new() { WordWrap = false, ViewportSettings = ViewportSettingsFlags.HasVerticalScrollBar | ViewportSettingsFlags.HasHorizontalScrollBar };
         private readonly FrameView _configForm = new() { BorderStyle = Terminal.Gui.Drawing.LineStyle.None };
         private readonly FrameView _configText = new() { BorderStyle = Terminal.Gui.Drawing.LineStyle.None, Visible = false };
-        private readonly Label _configHelp = new() { Text = "Move focus or hover over an option to see what it does.", X = 1, Y = 0, Width = Dim.Fill(1), Height = 2 };
+        private readonly Label _configHelp = new() { Text = "Move focus or hover over an option to see what it does.", X = 1, Y = 0, Width = Dim.Fill(1), Height = Dim.Fill() };
         private readonly Button _formModeButton = new() { Text = "_Form" };
         private readonly Button _textModeButton = new() { Text = "_Text" };
         private readonly Button _previousProfile = new() { Text = "_Previous", Enabled = false };
@@ -141,7 +141,7 @@ internal static class HydraTui
         private readonly TextField _deadCorners = new();
         private readonly CheckBox _hideCursor = new() { Text = "Hide Cursor" };
         private readonly CheckBox _remoteOnly = new() { Text = "Remote Only" };
-        private readonly TextField _clipboardSync = new();
+        private readonly CheckBox _systemClipboardSync = new() { Text = "Use System Clipboard" };
         private readonly CheckBox _syncScreensaver = new() { Text = "Sync Screensaver" };
         private readonly CheckBox _screenLockPropagation = new() { Text = "Propagate Screen Lock" };
         private readonly CheckBox _accelerateMouseWheel = new() { Text = "Accelerate Wheel" };
@@ -288,7 +288,7 @@ internal static class HydraTui
             _configForm.X = _configText.X = 0;
             _configForm.Y = _configText.Y = 2;
             _configForm.Width = _configText.Width = Dim.Fill();
-            _configForm.Height = _configText.Height = Dim.Fill(7);
+            _configForm.Height = _configText.Height = Dim.Fill(9);
             BuildGuidedConfigForm();
 
             _config.X = 0;
@@ -296,7 +296,8 @@ internal static class HydraTui
             _config.Width = Dim.Fill();
             _config.Height = Dim.Fill();
 
-            var helpPanel = new FrameView { Title = "Option Help", X = 0, Y = Pos.AnchorEnd(6), Width = Dim.Fill(), Height = 3 };
+            _configHelp.TextFormatter.WordWrap = true;
+            var helpPanel = new FrameView { Title = "Option Help", X = 0, Y = Pos.AnchorEnd(8), Width = Dim.Fill(), Height = 5 };
             helpPanel.Add(_configHelp);
             var validate = new Button { Text = "_Validate", X = 1, Y = Pos.AnchorEnd(2) };
             validate.Accepting += (_, e) => { e.Handled = true; ValidateConfig(); };
@@ -593,7 +594,10 @@ internal static class HydraTui
             PlaceCheckBox(behavior, _screenLockPropagation, 6, "Propagate this master's machine lock to connected slaves.");
             PlaceCheckBox(behavior, _accelerateMouseWheel, 8, "Apply Hydra's scroll-wheel acceleration behavior.");
             PlaceCheckBox(behavior, _unicodeKeyRepeat, 10, "Repeat printable keys as Unicode on Mac slaves to avoid the accent popup.");
-            AddFieldAt(behavior, "Clipboard Sync", _clipboardSync, 42, 58, 0, 18, "Hydra uses its cross-platform clipboard protocol. System stands down for Mac-to-Mac peers and lets Universal Clipboard handle them.");
+            _systemClipboardSync.X = 42;
+            _systemClipboardSync.Y = 0;
+            behavior.Add(_systemClipboardSync);
+            BindConfigHelp(_systemClipboardSync, "System Clipboard", "Off uses Hydra's cross-platform clipboard protocol. On stands down for Mac-to-Mac peers and lets Universal Clipboard handle them; Windows and Linux peers still use Hydra.");
 
             _advancedSummary.X = 1; _advancedSummary.Y = 12; _advancedSummary.Width = Dim.Fill(1); _advancedSummary.Height = 3;
             behavior.Add(_advancedSummary);
@@ -1022,7 +1026,7 @@ internal static class HydraTui
             _deadCorners.Text = profile.DeadCorners?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
             SetChecked(_hideCursor, profile.HideCursor);
             SetChecked(_remoteOnly, profile.RemoteOnly);
-            _clipboardSync.Text = profile.ClipboardSync;
+            SetChecked(_systemClipboardSync, profile.UseSystemClipboard);
             SetChecked(_syncScreensaver, profile.SyncScreensaver);
             SetChecked(_screenLockPropagation, profile.ScreenLockPropagation);
             SetChecked(_accelerateMouseWheel, profile.AccelerateMouseWheel);
@@ -1050,7 +1054,7 @@ internal static class HydraTui
                 _embeddedServerPassword.Text,
                 IsChecked(_hideCursor),
                 IsChecked(_remoteOnly),
-                _clipboardSync.Text.Trim(),
+                IsChecked(_systemClipboardSync),
                 IsChecked(_syncScreensaver),
                 IsChecked(_screenLockPropagation),
                 IsChecked(_accelerateMouseWheel),
