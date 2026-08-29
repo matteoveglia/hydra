@@ -30,7 +30,11 @@ public sealed record RelayTransportSnapshot(
     long MessagesSent,
     long MessagesReceived,
     long BytesSent,
-    long BytesReceived);
+    long BytesReceived,
+    long SendQueueDepth,
+    long MaxSendQueueDepth,
+    long OldestQueuedMilliseconds,
+    long LastSendLatencyMilliseconds);
 
 public class NullRelaySender : IRelaySender
 {

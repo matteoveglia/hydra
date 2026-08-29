@@ -1359,6 +1359,7 @@ internal static class HydraTui
                   Relay         {relay.RelayHost} → {relay.RemoteAddress}:{relay.RemotePort}
                   Connected for {DateTimeOffset.UtcNow - relay.ConnectedAt:g}
                   Relay traffic ↑ {FormatBytes(relay.BytesSent)} / {relay.MessagesSent} msg   ↓ {FormatBytes(relay.BytesReceived)} / {relay.MessagesReceived} msg
+                  Send queue {relay.SendQueueDepth} now / {relay.MaxSendQueueDepth} peak   oldest {relay.OldestQueuedMilliseconds} ms   last send {relay.LastSendLatencyMilliseconds} ms
                   Attempts      {relay.ConnectionAttempts}
                 """;
             var activeAdapters = s.ActiveNetworkAdapters ?? [];

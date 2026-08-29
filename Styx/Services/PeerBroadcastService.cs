@@ -63,11 +63,12 @@ public class PeerBroadcastService(IClientRegistry registry, IHubContext<StyxHub,
             var allHostNames = clients.Select(c => c.HostName).OrderBy(h => h, StringComparer.Ordinal).ToArray();
             var peerList = allHostNames.Length > 0 ? string.Join(", ", allHostNames) : "<none>";
             log.LogInformation("Network {NetworkId} peers: {Peers}", networkId, peerList);
-            foreach (var (connectionId, hostName) in clients)
+            var sends = clients.Select(client =>
             {
-                var peers = allHostNames.Where(h => !h.EqualsOrdinal(hostName)).ToArray();
-                await hubContext.Clients.Client(connectionId).Peers(peers);
-            }
+                var peers = allHostNames.Where(h => !h.EqualsOrdinal(client.HostName)).ToArray();
+                return hubContext.Clients.Client(client.ConnectionId).Peers(peers);
+            });
+            await Task.WhenAll(sends);
         }
         catch (Exception ex)
         {

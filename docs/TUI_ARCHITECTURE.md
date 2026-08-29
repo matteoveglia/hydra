@@ -47,7 +47,7 @@ The principal implementation areas are:
 
 ## Local management boundary
 
-Local management uses a versioned, four-byte length-prefixed JSON protocol with a 2 MiB frame limit. The endpoint identity is derived from the canonical configuration path so multiple Hydra instances do not collide.
+Local management uses a versioned, four-byte length-prefixed JSON protocol with a 2 MiB frame limit and at most 16 active request handlers. The endpoint identity is derived from the canonical configuration path so multiple Hydra instances do not collide.
 
 - macOS and Linux use a user-private Unix socket directory and socket.
 - Windows uses a named pipe restricted to the intended local security context.
@@ -88,7 +88,7 @@ Do not expose the local IPC endpoint over the network, reuse ordinary relay pass
 
 ## Runtime and lifecycle behavior
 
-The TUI reports status, active profile, relay route, network adapters, embedded-relay peers, latency, screens, routing state, and bounded logs. Runtime controls include reconnect, restart, shutdown where supported, and a guarded start after the TUI itself confirmed shutdown.
+The TUI reports status, active profile, relay route, network adapters, embedded-relay peers, latency, send-queue depth/age, screens, routing state, and bounded logs. Runtime controls include reconnect, restart, shutdown where supported, and a guarded start after the TUI itself confirmed shutdown.
 
 Platform lifecycle behavior is intentionally different:
 

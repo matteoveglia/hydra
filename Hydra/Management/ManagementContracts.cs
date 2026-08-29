@@ -38,7 +38,11 @@ public sealed record RelayConnectionStatus(
     long MessagesSent,
     long MessagesReceived,
     long BytesSent,
-    long BytesReceived);
+    long BytesReceived,
+    long SendQueueDepth,
+    long MaxSendQueueDepth,
+    long OldestQueuedMilliseconds,
+    long LastSendLatencyMilliseconds);
 
 public sealed record NetworkAdapterStatus(
     string Name,
