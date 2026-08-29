@@ -77,7 +77,6 @@ cat > "$SCRIPT_DIR/.dockerignore" <<'IGNORE'
 **/bin/
 **/obj/
 .git/
-HydraWebConfig/node_modules/
 docs/assets/
 IGNORE
 

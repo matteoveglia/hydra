@@ -28,7 +28,6 @@ Before changing code, inspect the relevant implementation, its tests, and any pu
 - `Common/`: DTOs and interfaces shared by Hydra and Styx.
 - `Styx/`: ASP.NET Core relay server. Treat wire/protocol compatibility as public behavior; consult `Styx.md`.
 - `Tests/`: NUnit tests, arranged by production concern. `Tests/Setup/` contains integration fixtures and fakes.
-- `HydraWebConfig/`: independent React 19/TypeScript/Vite config editor. See its scoped `AGENTS.md`.
 - `docs/CONFIGURATION.md`: canonical user-facing configuration and source-build reference.
 - `run-tests.sh`: native macOS, containerized Linux/X11, and optional real-Windows test lanes.
 
@@ -67,7 +66,6 @@ Choose broader validation in proportion to the change:
 - Cross-platform/high-risk changes: `./run-tests.sh all` when all environments are available; otherwise report unrun lanes explicitly.
 - macOS packaging or native changes: additionally publish with `dotnet publish Hydra --configuration Release --runtime osx-arm64 --self-contained --no-restore`.
 - Styx container changes: build `Styx/Dockerfile` locally when Docker is available.
-- HydraWebConfig changes: follow `HydraWebConfig/AGENTS.md`.
 
 Platform-gated tests can skip on the wrong OS. A green macOS run does not prove Windows or Linux native behavior. Do not claim validation for a lane that did not execute.
 
@@ -79,7 +77,7 @@ Before committing or handing off, run `git diff --check`, inspect `git status --
 - Preserve key-down/key-up pairing, modifier state, repeat semantics, and disconnect cleanup.
 - Maintain Unicode/layout behavior; do not replace resolved-character routing with physical-key assumptions globally.
 - Keep platform fallbacks when a native/private facility is unavailable.
-- Changes to config fields require parsing/validation tests and corresponding updates to `docs/CONFIGURATION.md` and the web editor when applicable.
+- Changes to config fields require parsing/validation tests and corresponding updates to `docs/CONFIGURATION.md`. When a field is editable through the TUI guided form, update that form while preserving unknown and advanced JSON fields.
 - Changes to shared DTOs, SignalR methods, encryption framing, or MessagePack behavior require compatibility tests and an update to `Styx.md` when the documented protocol changes.
 - Avoid blocking the input/network hot path. If native work can be slow, bounded retries and explicit fallbacks are required.
 
