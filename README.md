@@ -2,28 +2,24 @@
 
 **A modern, cross-platform software KVM** — share one keyboard and mouse across Mac, Windows, and Linux by moving the cursor to the edge of the screen. A spiritual successor to Synergy and Barrier, with end to end encryption, support for online relays to bridge networks or VPN connections, and sending key input as pre-resolved Unicode characters to eliminate keyboard layout issues.
 
+> [!IMPORTANT]
+> This repository is a fork of the original [PacAnimal/hydra](https://github.com/PacAnimal/hydra) project. It intentionally carries fork-specific TUI management, relay diagnostics, remote configuration, and macOS behavior. Releases and support expectations for this fork may differ from upstream.
+
 [![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/PacAnimal/hydra)](https://github.com/PacAnimal/hydra/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/PacAnimal/hydra/total)](https://github.com/PacAnimal/hydra/releases)
-[![Build](https://github.com/PacAnimal/hydra/actions/workflows/build-hydra.yml/badge.svg)](https://github.com/PacAnimal/hydra/actions/workflows/build-hydra.yml)
+
+_Demonstration artwork from the upstream project:_
 
 ![Hydra — cursor crossing from Windows to macOS](https://raw.githubusercontent.com/PacAnimal/hydra/assets/hero.gif)
 
 ---
 
-## Why Hydra?
+## What this fork adds
 
-| Feature | Hydra | Synergy 3 | Deskflow | Input Leap | Barrier |
-|---|---|---|---|---|---|
-| Open source | ✅ GPLv2 | ❌ commercial ($29–39) | ✅ GPLv2 | ✅ GPLv2 | ✅ GPLv2 |
-| macOS / Windows / Linux | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Works across networks / NAT (encrypted relay)** | ✅ | ❌ LAN only | ❌ | ❌ | ❌ |
-| **Network-aware profile switching** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Cross-layout keyboard (types 'å' correctly on a US slave)** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Headless Linux / Raspberry Pi forwarder (no display server)** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Cross-machine file transfer | ✅ macOS + Windows | ✅ Windows + macOS | ❌ | ❌ | ❌ |
-| Clipboard sync (text + images) | ✅ | ✅ | ✅ | partial | partial |
-| Active development (2026) | ✅ | ✅ | ✅ | partial | ❌ |
+- A local cross-platform terminal control center for status, logs, diagnostics, lifecycle controls, and safe configuration editing.
+- Explicitly paired remote configuration over Hydra's encrypted relay, with redaction, revision checks, and automatic rollback of unconfirmed changes.
+- Route and adapter diagnostics for understanding which interface and socket Hydra actually selected.
+- Fork-specific macOS keyboard, media, audio, brightness, and service behavior.
+- Continued support for upstream Hydra's encrypted relay, network-aware profiles, Unicode-aware keyboard forwarding, and headless Linux input forwarding.
 
 ---
 
@@ -43,52 +39,37 @@
 
 ## Install
 
-Run the binary directly to try Hydra out, or use `--install` to set it up as a service / LaunchAgent that auto-starts on login and survives reboots.
+This fork does not currently publish downloadable binary releases. Clone this repository and build it with the .NET 10 SDK to get the fork-specific behavior described here; [upstream releases](https://github.com/PacAnimal/hydra/releases) do not contain this fork's additional changes.
 
-**macOS (Apple Silicon):**
 ```bash
-curl -L https://github.com/PacAnimal/hydra/releases/latest/download/hydra-osx-arm64.tar.gz | tar xz
-./hydra             # run directly — good for testing, no install needed
-./hydra --install   # installs as a login item, auto-starts on login
+cd hydra
+dotnet publish Hydra --configuration Release --runtime osx-arm64 --self-contained
 ```
-`--install` registers a LaunchAgent, clears the quarantine flag, and starts Hydra immediately. Grant Accessibility permission when prompted: System Settings → Privacy & Security → Accessibility → enable Hydra. To remove: `./hydra --uninstall`.
 
-**Windows (x64):**
+Replace `osx-arm64` with the appropriate runtime identifier: `win-x64`, `linux-x64`, or `linux-arm64`. The executable is written to `Hydra/bin/Release/net10.0/<rid>/publish/`.
 
-Download [hydra-win-x64.zip](https://github.com/PacAnimal/hydra/releases/latest/download/hydra-win-x64.zip), extract, then run:
-```
-hydra.exe             # run directly — good for testing, no install needed
-hydra.exe --install   # install as a Windows service (auto-start, survives logout)
-```
-A UAC prompt will appear for `--install`. Because Hydra installs as a `LocalSystem` service, it stays active on the Windows login and lock screens — mouse and keyboard control works even before you sign in. To remove: `hydra.exe --uninstall`.
+Run it directly first:
 
-**Linux (x64):**
 ```bash
-curl -L https://github.com/PacAnimal/hydra/releases/latest/download/hydra-linux-x64.tar.gz | tar xz
-chmod +x hydra
-./hydra
+cd Hydra/bin/Release/net10.0/osx-arm64/publish
+./Hydra
 ```
 
-**Linux (arm64 / Raspberry Pi):**
-```bash
-curl -L https://github.com/PacAnimal/hydra/releases/latest/download/hydra-linux-arm64.tar.gz | tar xz
-chmod +x hydra
-./hydra
-```
+On macOS, `./Hydra --install` registers and starts a per-user LaunchAgent. Grant Accessibility permission under System Settings → Privacy & Security → Accessibility. `./Hydra --uninstall` removes it.
 
-All releases are [self-contained](https://github.com/PacAnimal/hydra/releases) — no .NET runtime installation required.
+On Windows, run `.\Hydra.exe --install` from an elevated terminal to install the LocalSystem service; use `.\Hydra.exe --uninstall` to remove it. Service mode stays active at login and lock screens.
 
-> **Linux with display:** Requires X11 with XInput2. Wayland is not yet supported.
+Linux has no Hydra-owned installer. Run `Hydra` directly or configure your preferred supervisor. Linux desktop use requires X11 with XInput2; Wayland is not supported. Headless Linux uses evdev and is documented under [Remote-only mode](docs/CONFIGURATION.md#headless-linux-no-display-server).
 
-> **Linux headless (no display):** See [Remote-only / Raspberry Pi setup](docs/CONFIGURATION.md#headless-linux-no-display-server).
+> **Fork update note:** the current in-app self-updater still checks the upstream `PacAnimal/hydra` release feed. Set `"autoUpdate": false` in `hydra.conf` to prevent a source-built fork binary from replacing itself with an upstream release.
 
 ### Terminal control center
 
-Open Hydra's local cross-platform TUI in another terminal:
+Open Hydra's local cross-platform TUI in another terminal. The TUI is the fork's only interactive configuration editor:
 
 ```bash
-./hydra tui
-./hydra tui --config /path/to/hydra.conf
+./Hydra tui
+./Hydra tui --config /path/to/hydra.conf
 ```
 
 The control center shows the running process, active profile, relay, screens, peers, current routing state, exact relay network interface/socket, peer RTT/jitter, adapter traffic/error counters, embedded-relay peer interfaces, and a bounded live log. It can request a relay reconnect or Hydra restart, and can validate and atomically save `hydra.conf`; accepted actions show live progress in the bottom activity line without blocking refreshes behind a success dialog. The Configuration tab has a sectioned form for common settings and a complete JSON text editor; switching between them preserves advanced fields. Selected tabs and form sections use persistent colour independent of focus, and empty optional fields show their effective default or inherited value. Hovering an option or moving keyboard focus to it displays contextual help. Configuration editing remains available when Hydra is offline. Relay passwords and `networkConfig` values are hidden unless you explicitly reveal them in Text mode.
@@ -97,7 +78,7 @@ The Overview tab also provides a confirmed **Shutdown Hydra** action. On macOS, 
 
 After the TUI confirms shutdown, **Start Hydra** becomes available. It starts the installed macOS LaunchAgent when available, or launches the current executable directly with the selected configuration. A generic management connection failure does not enable Start because Hydra may still be running.
 
-The local management endpoint remains machine-local. The Remote tab can manage an explicitly paired online peer through Hydra's end-to-end encrypted relay. On the peer, run `./hydra pair` to generate a single-use 10-minute code, then enter its host name and code in the controlling TUI. Remote configurations are redacted at the source. A remote apply keeps a restrictive last-known-good backup and rolls back automatically unless the restarted peer reconnects on the candidate revision and the controller confirms it within 90 seconds. Relay, hostname, and profile-activation changes remain local-only because they could remove the recovery path.
+The local management endpoint remains machine-local. The Remote tab can manage an explicitly paired online peer through Hydra's end-to-end encrypted relay. On the peer, run `./Hydra pair` to generate a single-use 10-minute code, then enter its host name and code in the controlling TUI. Remote configurations are redacted at the source. A remote apply keeps a restrictive last-known-good backup and rolls back automatically unless the restarted peer reconnects on the candidate revision and the controller confirms it within 90 seconds. Relay, hostname, and profile-activation changes remain local-only because they could remove the recovery path.
 
 Closing the TUI does not stop Hydra. Use `Esc` to quit the TUI.
 
@@ -135,7 +116,7 @@ Create `hydra.conf` next to the binary on **each machine**.
 }
 ```
 
-Replace `192.168.1.10` with the master's IP address. Run `./hydra` on both machines. Move the cursor past the right edge of the master's screen — it appears on the slave.
+Replace `192.168.1.10` with the master's IP address. Run `./Hydra` on both machines. Move the cursor past the right edge of the master's screen — it appears on the slave.
 
 ### Hotkeys
 
@@ -152,9 +133,9 @@ For cross-network setups (different LANs or over a VPN), see [Networking with St
 
 ---
 
-## Config editor
+## Configure Hydra
 
-The easiest way to set up multi-machine layouts, Styx relay configs, and network-aware profiles is the **[Hydra Config Editor](https://hydra-config.c-net.org/)** — a web UI that lets you visually arrange screens and download a ready-to-use `hydra.conf`.
+Create the initial `hydra.conf` from the examples or the quickstart above, then use `Hydra tui` for guided edits or complete JSON editing. The TUI uses Hydra's canonical parser and validator and preserves fields that are not exposed by the guided form. See the [configuration reference](docs/CONFIGURATION.md) for every field and topology option.
 
 ---
 
@@ -182,4 +163,6 @@ The easiest way to set up multi-machine layouts, Styx relay configs, and network
 ## Full documentation
 
 - [Configuration reference](docs/CONFIGURATION.md) — all config fields, screen layout options, network-aware profiles, hotkeys, Styx setup, and building from source
+- [TUI architecture](docs/TUI_ARCHITECTURE.md) — current management boundaries, security invariants, platform lifecycle behavior, and validation expectations
+- [Stability and simplification programme](docs/STABILITY_AND_SIMPLIFICATION_PLAN.md) — active reliability priorities and safe-change rules for this fork
 - [Styx protocol](Styx.md) — the relay's wire protocol, for implementing your own client or server against it

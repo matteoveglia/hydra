@@ -10,12 +10,13 @@ Before changing code, inspect the relevant implementation, its tests, and any pu
 
 ## Repository identity
 
-- `origin` is Matteo's personal fork: `matteoveglia/hydra`.
+- `origin` is this repository's fork.
 - `upstream` is the original project: `PacAnimal/hydra`.
-- Personal-fork `main` intentionally contains local macOS behavior beyond upstream.
+- Fork `main` intentionally contains TUI/remote management, relay diagnostics, and macOS behavior beyond upstream.
 - Never overwrite personal macOS customizations while syncing upstream. Inspect the graph and reconcile explicitly.
 - Push to `origin` only unless the user explicitly asks for an upstream PR. Upstream contributions should be small, generic branches with no machine-specific integration.
 - A push to `main` triggers build/release workflows. Do not push, tag, publish, or run install/uninstall commands unless explicitly requested.
+- Public documentation, badges, and download links must identify this repository as a fork and distinguish fork releases from upstream. When changing release identity, inspect the Hydra workflow, Styx image owner, documentation, and `SelfUpdater` together; do not silently repoint only one surface.
 
 ## Architecture map
 
@@ -24,11 +25,14 @@ Before changing code, inspect the relevant implementation, its tests, and any pu
   - `Keyboard/`, `Mouse/`, `Screen/`: platform-neutral input and routing semantics.
   - `Platform/{MacOs,Windows,Linux}/`: native input/output, clipboard, screen, service, and OS integration.
   - `Relay/`: Hydra's encrypted peer protocol and Styx connection behavior.
+  - `Management/`, `Tui/`: local management IPC, transactional configuration, paired remote management, and the Terminal.Gui control center.
   - `FileTransfer/`, `Update/`: file transport and self-update behavior.
 - `Common/`: DTOs and interfaces shared by Hydra and Styx.
 - `Styx/`: ASP.NET Core relay server. Treat wire/protocol compatibility as public behavior; consult `Styx.md`.
 - `Tests/`: NUnit tests, arranged by production concern. `Tests/Setup/` contains integration fixtures and fakes.
 - `docs/CONFIGURATION.md`: canonical user-facing configuration and source-build reference.
+- `docs/TUI_ARCHITECTURE.md`: current TUI/management architecture and maintenance constraints.
+- `docs/STABILITY_AND_SIMPLIFICATION_PLAN.md`: active reliability backlog, invariants, and validation matrix.
 - `run-tests.sh`: native macOS, containerized Linux/X11, and optional real-Windows test lanes.
 
 `Hydra/Program.cs` is the composition root. Platform services are selected there by OS and master/slave mode. Preserve registration order where startup services depend on screen or network state.
@@ -42,6 +46,8 @@ Before changing code, inspect the relevant implementation, its tests, and any pu
 - Native handles, callbacks, delegates, and buffers require explicit lifetime/ownership reasoning. Do not remove apparently redundant keep-alives or releases without proving ownership.
 - Never commit `Hydra/hydra.conf`, relay passwords, network-config blobs, machine hostnames/IPs, signing credentials, logs, or generated binaries.
 - Do not edit `bin/`, `obj/`, `test-output/`, generated MacShield app contents, or package lockfiles unless the task requires regenerating them.
+- `hydra tui` is the sole Hydra configuration editor. Do not reintroduce a separate Hydra web configuration schema or application.
+- Styx's optional relay network-config page under `Styx/wwwroot/` is a separate provisioning surface documented in `Styx.md`; do not confuse it with the retired Hydra editor.
 
 ## Validation
 
@@ -78,6 +84,7 @@ Before committing or handing off, run `git diff --check`, inspect `git status --
 - Maintain Unicode/layout behavior; do not replace resolved-character routing with physical-key assumptions globally.
 - Keep platform fallbacks when a native/private facility is unavailable.
 - Changes to config fields require parsing/validation tests and corresponding updates to `docs/CONFIGURATION.md`. When a field is editable through the TUI guided form, update that form while preserving unknown and advanced JSON fields.
+- TUI or management changes must preserve local-only IPC, bounded framing/logs, config-path instance identity, secret redaction, revision-aware saves, and remote apply confirmation/rollback.
 - Changes to shared DTOs, SignalR methods, encryption framing, or MessagePack behavior require compatibility tests and an update to `Styx.md` when the documented protocol changes.
 - Avoid blocking the input/network hot path. If native work can be slow, bounded retries and explicit fallbacks are required.
 
@@ -92,7 +99,7 @@ Before committing or handing off, run `git diff --check`, inspect `git status --
 
 - The change is narrowly scoped and explained by the diff.
 - Relevant regression coverage exists where practical.
-- Required docs/config editor changes are included.
+- Required documentation and TUI changes are included.
 - Focused tests and the appropriate build/publish lane pass.
 - Any platform or live validation gaps are stated plainly.
 - The working tree contains no unintended generated files or unrelated edits.

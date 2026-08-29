@@ -2,7 +2,7 @@
 
 This file applies to `Hydra/Platform/MacOs/` and supplements the repository root guide.
 
-## Current personal-fork behavior
+## Current fork behavior
 
 - `MacInputHandler` captures and resolves local macOS input on the master.
 - `MacOutputHandler` injects ordinary input and dispatches special actions on the slave.
@@ -16,6 +16,8 @@ This file applies to `Hydra/Platform/MacOs/` and supplements the repository root
   4. Hydra's legacy synthetic media-key path when no controller is available.
 
 The raw DDC fallback currently uses the first compatible `DCPAVServiceProxy`; do not present it as robust multi-external-display routing until service-to-display matching is implemented and tested.
+
+User-visible changes to these fork-specific paths must be reflected in the README or configuration reference where applicable. Keep claims scoped to the exact route tested; do not imply that a private API fallback or one monitor/output-device result proves general macOS support.
 
 ## Native interop rules
 

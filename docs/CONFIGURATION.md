@@ -1,6 +1,6 @@
 # Hydra — Configuration Reference
 
-See the [project README](../README.md) for installation and a quick-start guide.
+This reference documents this fork. See the [project README](../README.md) for fork identity, installation, and a quick-start guide.
 
 **Contents**
 
@@ -32,10 +32,10 @@ See the [project README](../README.md) for installation and a quick-start guide.
 
 ## Config file location
 
-The config file is `hydra.conf`, located next to the binary. Set the `CONFIG` environment variable to use a different path:
+Hydra first looks for `hydra.conf` next to the running binary, then in the current working directory. Set the `CONFIG` environment variable to use an explicit path:
 
 ```bash
-CONFIG=/path/to/hydra.conf ./hydra
+CONFIG=/path/to/hydra.conf ./Hydra
 ```
 
 ## Terminal control center
@@ -43,8 +43,8 @@ CONFIG=/path/to/hydra.conf ./hydra
 Run the TUI in a separate terminal while Hydra is running:
 
 ```bash
-./hydra tui
-./hydra tui --config /path/to/hydra.conf
+./Hydra tui
+./Hydra tui --config /path/to/hydra.conf
 ```
 
 `--config` must identify the same canonical config path as the daemon you want to manage. The TUI connects through a local-only Unix socket on macOS/Linux or a restricted named pipe on Windows; it does not expose a network management port.
@@ -64,8 +64,8 @@ Passwords and `networkConfig` values use secret fields in Form mode and are mask
 Remote management is opt-in per machine. On the peer to manage, generate a single-use code locally:
 
 ```bash
-./hydra pair
-./hydra pair --config /path/to/hydra.conf
+./Hydra pair
+./Hydra pair --config /path/to/hydra.conf
 ```
 
 The code expires after 10 minutes. In the controlling TUI, open **Remote**, enter the peer's Hydra host name and code, and select **Pair**. Pairing creates a separate management credential in `.hydra-management.json` beside `hydra.conf`; the ordinary shared relay configuration does not grant remote-admin rights. The sidecar contains secrets and is written with user-only permissions on Unix-like systems. A user-only `.hydra-management.lock` coordinates updates from the running daemon and the `pair` command. Do not copy either file into source control or diagnostics.
@@ -83,24 +83,33 @@ Use `Esc` to close the TUI. It does not change Hydra's running state.
 - `name` — this machine's name on the network. Optional — defaults to the machine's hostname without domain. Must match one of the host names for the master to identify its own screen.
 - `logLevel` — `trce`, `dbug`, `info`, `warn`, `fail`, or `crit`
 - `logFile` — path to a file where log output is also written (in addition to the console); relative paths are resolved from the config file's directory (default: none)
-- `logTruncate` — if `true`, truncate `logFile` to 0 bytes on each startup so it doesn't grow unbounded (default: `false`)
-- `autoUpdate` — `false` to disable automatic updates
+- `sessionLogFile` — log file used by the interactive child launched by Windows service mode (default: none)
+- `logTruncate` — if `true`, truncate the active `logFile` or `sessionLogFile` on startup (default: `false`)
+- `autoUpdate` — `false` to disable automatic updates (default: `true`). Current fork binaries still query the upstream `PacAnimal/hydra` release feed, so disable this to prevent a source-built fork binary from replacing itself with an upstream release.
 - `lockFile` — path to a lock file to prevent multiple instances (default: none)
+- `profile` — force the named `profileName` regardless of conditions; intended for diagnosis and controlled overrides
+- `debugShield` — enable verbose cursor-shield diagnostics (default: `false`)
+- `debugMouse` — enable verbose mouse-routing diagnostics (default: `false`)
 - `profiles` — array of profile objects (see below); at least one required
 
 **Per-profile** (inside a `profiles` entry):
 
 - `profileName` — name for this profile, logged at startup so you know which one is active (no duplicates allowed)
 - `mode` — `Master` or `Slave`
-- `networkConfig` — base64 relay config string from the Styx web UI; use this to connect to a standalone Styx server
+- `networkConfig` — base64 relay config string from the Styx relay network-config page; use this to connect to a standalone Styx server
 - `embeddedStyx` — connect to a Styx server using plain-text credentials: `{ "server": "http://<host>:<port>", "password": "<password>" }` — a more readable alternative to copying the base64 `networkConfig` blob
 - `embeddedStyxServer` — run a Styx relay server embedded inside this Hydra process: `{ "port": <port>, "password": "<password>" }` — useful for home setups where you don't want a separate Styx container; the machine running this automatically connects to its own server, and other machines connect to it using `embeddedStyx`
 - `hosts` — list of host entries for the neighbour graph (master only; slaves don't need this)
 - `screenDefinitions` — per-screen scale config (slave only; reported to master via ScreenInfo)
 - `mouseScale` — fallback cursor speed multiplier for all screens on this slave (slave only)
+- `relativeMouseScale` — fallback relative-mode speed multiplier for all screens on this slave; falls back to `mouseScale` when omitted (slave only)
+- `hideCursor` — hide the master's local cursor while it is inactive or routed remotely (master only; default: `false`)
 - `deadCorners` — pixel dead zone at screen corners where transitions are blocked (default `0`, `50` is a reasonable starting value). Scaled by the screen's mouseScale. Can also be set per-host to override.
 - `remoteOnly` — `true` to forward all input to remote machines immediately at startup, with no local screen involved (see [Remote-only mode](#remote-only-mode))
 - `syncScreensaver` — `false` to disable screensaver synchronisation (default: `true`)
+- `screenLockPropagation` — propagate a Mac/Windows master's local lock to connected slaves (master only; default: `false`)
+- `accelerateMouseWheel` — apply the platform wheel-acceleration behavior (default: `true`)
+- `unicodeKeyRepeat` — repeat held printable keys through Unicode insertion where supported, avoiding the macOS press-and-hold accent UI (master preference; default: `true`)
 - `conditions` — optional object; if set, this profile only activates when **all** specified conditions are met (see [Network-aware config](#network-aware-config))
   - `ssid` — activates when connected to this WiFi network name (case-insensitive)
   - `screenCount` — activates when exactly this many screens are connected (integer ≥ 1)
@@ -224,8 +233,9 @@ Each entry specifies one or more match criteria — all specified criteria must 
 | `outputName` | — | Match by output connector name (e.g. `"HDMI-1"`) |
 | `platformId` | — | Match by platform-specific ID |
 | `mouseScale` | — | Cursor speed multiplier on this screen; overrides the profile-level `mouseScale` |
+| `relativeMouseScale` | — | Relative-mode speed multiplier on this screen; overrides profile-level `relativeMouseScale` |
 
-The profile-level `mouseScale` sets a fallback multiplier for all screens on this slave. Per-screen `mouseScale` in a `screenDefinitions` entry overrides it. If neither is set, the multiplier defaults to `1.0`.
+The profile-level `mouseScale` sets the ordinary fallback multiplier for all screens on this slave. `relativeMouseScale` sets the relative-mode fallback and itself falls back to `mouseScale`. Per-screen values override their corresponding profile values. If no applicable value is set, the multiplier defaults to `1.0`.
 
 At least one match field must be set per `screenDefinitions` entry.
 
@@ -422,7 +432,7 @@ On a console-only Linux machine (no `$DISPLAY`), Hydra automatically uses the ev
 Requirements:
 - User must be in the `input` group: `sudo usermod -aG input $USER` (log out and back in for the group change to take effect)
 - `libxkbcommon` installed: `sudo apt install libxkbcommon0`
-- Set the keyboard layout via `XKB_DEFAULT_LAYOUT` if not `us`, e.g. `XKB_DEFAULT_LAYOUT=gb ./hydra`
+- Set the keyboard layout via `XKB_DEFAULT_LAYOUT` if not `us`, e.g. `XKB_DEFAULT_LAYOUT=gb ./Hydra`
 
 > If `$DISPLAY` is set (X11 is running), Hydra uses X11 regardless of `remoteOnly`.
 
@@ -478,6 +488,8 @@ The `embeddedStyx` property is also an alternative to `networkConfig` for any ex
 
 ### Running standalone Styx
 
+The commands below use the upstream-compatible public image. To guarantee that Styx matches this fork's current source, build it locally using the commands after the examples.
+
 ```bash
 docker run -e RELAY_PASSWORD=<secret> -p 5000:5000 ghcr.io/pacanimal/styx:latest
 ```
@@ -503,7 +515,7 @@ docker run -e RELAY_PASSWORD=<secret> -p 5000:5000 styx:local
 
 ### Generating a network config
 
-Open `http://<your-styx-host>:5000` in a browser, enter the relay password, and click **Generate**. Copy the config string.
+Open the optional Styx relay network-config page at `http://<your-styx-host>:5000`, enter the relay password, and click **Generate**. This page belongs to the relay server and is separate from the retired Hydra configuration editor. Copy the generated config string.
 
 ### Connecting Hydra to a standalone Styx server
 
@@ -519,7 +531,7 @@ Add `networkConfig` to `hydra.conf` on both machines. Use the same config string
     {
       "profileName": "Home",
       "mode": "Master",
-      "networkConfig": "<base64 string from the Styx web UI>",
+      "networkConfig": "<base64 string from the Styx relay network-config page>",
       "hosts": [
         {
           "name": "laptop",
