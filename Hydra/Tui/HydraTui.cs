@@ -141,6 +141,7 @@ internal static class HydraTui
         private readonly TextField _deadCorners = new();
         private readonly CheckBox _hideCursor = new() { Text = "Hide Cursor" };
         private readonly CheckBox _remoteOnly = new() { Text = "Remote Only" };
+        private readonly TextField _clipboardSync = new();
         private readonly CheckBox _syncScreensaver = new() { Text = "Sync Screensaver" };
         private readonly CheckBox _screenLockPropagation = new() { Text = "Propagate Screen Lock" };
         private readonly CheckBox _accelerateMouseWheel = new() { Text = "Accelerate Wheel" };
@@ -592,6 +593,7 @@ internal static class HydraTui
             PlaceCheckBox(behavior, _screenLockPropagation, 6, "Propagate this master's machine lock to connected slaves.");
             PlaceCheckBox(behavior, _accelerateMouseWheel, 8, "Apply Hydra's scroll-wheel acceleration behavior.");
             PlaceCheckBox(behavior, _unicodeKeyRepeat, 10, "Repeat printable keys as Unicode on Mac slaves to avoid the accent popup.");
+            AddFieldAt(behavior, "Clipboard Sync", _clipboardSync, 42, 58, 0, 18, "Hydra uses its cross-platform clipboard protocol. System stands down for Mac-to-Mac peers and lets Universal Clipboard handle them.");
 
             _advancedSummary.X = 1; _advancedSummary.Y = 12; _advancedSummary.Width = Dim.Fill(1); _advancedSummary.Height = 3;
             behavior.Add(_advancedSummary);
@@ -1020,6 +1022,7 @@ internal static class HydraTui
             _deadCorners.Text = profile.DeadCorners?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
             SetChecked(_hideCursor, profile.HideCursor);
             SetChecked(_remoteOnly, profile.RemoteOnly);
+            _clipboardSync.Text = profile.ClipboardSync;
             SetChecked(_syncScreensaver, profile.SyncScreensaver);
             SetChecked(_screenLockPropagation, profile.ScreenLockPropagation);
             SetChecked(_accelerateMouseWheel, profile.AccelerateMouseWheel);
@@ -1047,6 +1050,7 @@ internal static class HydraTui
                 _embeddedServerPassword.Text,
                 IsChecked(_hideCursor),
                 IsChecked(_remoteOnly),
+                _clipboardSync.Text.Trim(),
                 IsChecked(_syncScreensaver),
                 IsChecked(_screenLockPropagation),
                 IsChecked(_accelerateMouseWheel),

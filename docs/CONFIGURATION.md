@@ -106,6 +106,7 @@ Use `Esc` to close the TUI. It does not change Hydra's running state.
 - `hideCursor` — hide the master's local cursor while it is inactive or routed remotely (master only; default: `false`)
 - `deadCorners` — pixel dead zone at screen corners where transitions are blocked (default `0`, `50` is a reasonable starting value). Scaled by the screen's mouseScale. Can also be set per-host to override.
 - `remoteOnly` — `true` to forward all input to remote machines immediately at startup, with no local screen involved (see [Remote-only mode](#remote-only-mode))
+- `clipboardSync` — `Hydra` uses Hydra's cross-platform clipboard protocol (default). `System` makes a macOS master stand down for macOS peers so Universal Clipboard can operate without competing pasteboard writes; Hydra continues syncing with Windows and Linux peers.
 - `syncScreensaver` — `false` to disable screensaver synchronisation (default: `true`)
 - `screenLockPropagation` — propagate a Mac/Windows master's local lock to connected slaves (master only; default: `false`)
 - `accelerateMouseWheel` — apply the platform wheel-acceleration behavior (default: `true`)
@@ -341,6 +342,10 @@ All hotkeys use **Ctrl+Alt+Super** (Super = ⌘ on macOS, Win on Windows) plus o
 ## Clipboard sync
 
 When you move the cursor to a remote machine, Hydra pushes the local clipboard to it. When you move back, the remote clipboard is pulled to the local machine. This happens automatically — no hotkey needed.
+
+For Mac-to-Mac peers already using Apple's Universal Clipboard, set `"clipboardSync": "System"` on the active master profile. Hydra then sends no clipboard hash, push, or pull messages for macOS peers, while retaining its normal clipboard sync for Windows and Linux peers. Hydra cannot detect whether both Macs share an Apple Account or whether Handoff is enabled, so this mode is explicit rather than automatic. It does not disable Hydra's separate file-transfer hotkeys.
+
+On macOS, a Finder clipboard containing file URLs is always preserved: Hydra neither treats it as an empty clipboard nor overwrites it with an automatic clipboard transition.
 
 Synced content:
 - **Plain text** — all platforms

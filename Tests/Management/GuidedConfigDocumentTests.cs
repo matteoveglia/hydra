@@ -22,7 +22,7 @@ public class GuidedConfigDocumentTests
             """;
         var document = GuidedConfigDocument.Parse(json);
         var root = document.ReadRoot() with { Name = "after", AutoUpdate = false };
-        var profile = document.ReadProfile(0) with { Ssid = "Home WiFi", ScreenCount = 2, HideCursor = true };
+        var profile = document.ReadProfile(0) with { Ssid = "Home WiFi", ScreenCount = 2, HideCursor = true, ClipboardSync = "System" };
 
         document.WriteRoot(root);
         document.WriteProfile(0, profile);
@@ -41,6 +41,7 @@ public class GuidedConfigDocumentTests
             Assert.That(profileJson.GetProperty("conditions").GetProperty("ssid").GetString(), Is.EqualTo("Home WiFi"));
             Assert.That(profileJson.GetProperty("conditions").GetProperty("screenCount").GetInt32(), Is.EqualTo(2));
             Assert.That(profileJson.GetProperty("hideCursor").GetBoolean(), Is.True);
+            Assert.That(profileJson.GetProperty("clipboardSync").GetString(), Is.EqualTo("System"));
         });
     }
 

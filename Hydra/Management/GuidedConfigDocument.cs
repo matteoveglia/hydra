@@ -66,6 +66,7 @@ internal sealed class GuidedConfigDocument
             server == null ? null : String(server, "password"),
             Bool(profile, "hideCursor", false),
             Bool(profile, "remoteOnly", false),
+            String(profile, "clipboardSync") ?? "Hydra",
             Bool(profile, "syncScreensaver", true),
             Bool(profile, "screenLockPropagation", false),
             Bool(profile, "accelerateMouseWheel", true),
@@ -88,6 +89,7 @@ internal sealed class GuidedConfigDocument
         SetEmbeddedServer(profile, fields);
         profile["hideCursor"] = fields.HideCursor;
         profile["remoteOnly"] = fields.RemoteOnly;
+        profile["clipboardSync"] = fields.ClipboardSync;
         profile["syncScreensaver"] = fields.SyncScreensaver;
         profile["screenLockPropagation"] = fields.ScreenLockPropagation;
         profile["accelerateMouseWheel"] = fields.AccelerateMouseWheel;
@@ -182,6 +184,6 @@ internal sealed record GuidedRootFields(string? Name, string? ProfileOverride, s
 internal sealed record GuidedProfileFields(
     string? ProfileName, string Mode, string? Ssid, int? ScreenCount, bool? IsPluggedIn,
     string? NetworkConfig, string? EmbeddedServer, string? EmbeddedPassword, int? EmbeddedPort,
-    string? EmbeddedServerPassword, bool HideCursor, bool RemoteOnly, bool SyncScreensaver,
+    string? EmbeddedServerPassword, bool HideCursor, bool RemoteOnly, string ClipboardSync, bool SyncScreensaver,
     bool ScreenLockPropagation, bool AccelerateMouseWheel, bool UnicodeKeyRepeat, decimal? MouseScale,
     decimal? RelativeMouseScale, int? DeadCorners, int HostCount, int ScreenDefinitionCount);
