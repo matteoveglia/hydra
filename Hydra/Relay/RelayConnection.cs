@@ -24,6 +24,10 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
     private RelayEncryption? _encryption;
     private readonly Lock _connectionLock = new();
     private CancellationTokenSource? _connectionCancellation;
+    private bool _connectionIterationActive;
+    private bool _connectionSuspended;
+    private TaskCompletionSource _resumeConnection = CompletedSignal();
+    private TaskCompletionSource? _suspensionComplete;
     private RelayTransportSnapshot? _transport;
     private long _connectionAttempts;
     private long _messagesSent;
@@ -111,6 +115,45 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
             _connectionCancellation.Cancel();
             return true;
         }
+    }
+
+    public async ValueTask SuspendConnectionAsync(CancellationToken cancel = default)
+    {
+        Task suspension;
+        CancellationTokenSource? connection;
+        lock (_connectionLock)
+        {
+            if (!_connectionSuspended)
+            {
+                _connectionSuspended = true;
+                _resumeConnection = NewSignal();
+            }
+
+            if (!_connectionIterationActive) return;
+            _suspensionComplete ??= NewSignal();
+            suspension = _suspensionComplete.Task;
+            connection = _connectionCancellation;
+        }
+
+        try
+        {
+            if (connection != null)
+                await connection.CancelAsync().WaitAsync(cancel).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException) { }
+        await suspension.WaitAsync(cancel).ConfigureAwait(false);
+    }
+
+    public void ResumeConnection()
+    {
+        TaskCompletionSource resume;
+        lock (_connectionLock)
+        {
+            if (!_connectionSuspended) return;
+            _connectionSuspended = false;
+            resume = _resumeConnection;
+        }
+        resume.TrySetResult();
     }
 
     public async ValueTask SendReliableAsync(string[] targetHosts, byte[] payload, CancellationToken cancel = default)
@@ -234,6 +277,8 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
 
         while (!cancel.IsCancellationRequested)
         {
+            await WaitUntilConnectionResumed(cancel).ConfigureAwait(false);
+            if (!TryBeginConnectionIteration()) continue;
             Interlocked.Increment(ref _connectionAttempts);
             try
             {
@@ -242,6 +287,10 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
             catch (OperationCanceledException) when (cancel.IsCancellationRequested)
             {
                 break;
+            }
+            catch (OperationCanceledException) when (IsConnectionSuspended())
+            {
+                log.LogInformation("Relay connection suspended for system sleep");
             }
             catch (OperationCanceledException)
             {
@@ -279,11 +328,56 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
                         log.LogError(ex, "Error handling relay disconnect — continuing to reconnect");
                     }
                 }
+                EndConnectionIteration();
             }
 
-            if (!cancel.IsCancellationRequested)
+            if (!cancel.IsCancellationRequested && !IsConnectionSuspended())
                 await Task.Delay(WithJitter(ReconnectDelay), cancel).ConfigureAwait(false);
         }
+    }
+
+    private async Task WaitUntilConnectionResumed(CancellationToken cancel)
+    {
+        Task resume;
+        lock (_connectionLock) resume = _resumeConnection.Task;
+        await resume.WaitAsync(cancel).ConfigureAwait(false);
+    }
+
+    private bool TryBeginConnectionIteration()
+    {
+        lock (_connectionLock)
+        {
+            if (_connectionSuspended) return false;
+            _connectionIterationActive = true;
+            return true;
+        }
+    }
+
+    private bool IsConnectionSuspended()
+    {
+        lock (_connectionLock) return _connectionSuspended;
+    }
+
+    private void EndConnectionIteration()
+    {
+        TaskCompletionSource? complete;
+        lock (_connectionLock)
+        {
+            _connectionIterationActive = false;
+            complete = _suspensionComplete;
+            _suspensionComplete = null;
+        }
+        complete?.TrySetResult();
+    }
+
+    private static TaskCompletionSource NewSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static TaskCompletionSource CompletedSignal()
+    {
+        var signal = NewSignal();
+        signal.SetResult();
+        return signal;
     }
 
     private async Task Connect(NetworkConfig netConfig, string hostName, CancellationToken cancel)
@@ -563,7 +657,13 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
         {
             _owner = owner;
             _cancellation = cancellation;
-            lock (_owner._connectionLock) _owner._connectionCancellation = cancellation;
+            bool suspend;
+            lock (_owner._connectionLock)
+            {
+                _owner._connectionCancellation = cancellation;
+                suspend = _owner._connectionSuspended;
+            }
+            if (suspend) cancellation.Cancel();
         }
 
         public void Dispose()

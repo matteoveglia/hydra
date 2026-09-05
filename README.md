@@ -20,6 +20,7 @@ _Demonstration artwork from the upstream project:_
 - Route and adapter diagnostics for understanding which interface and socket Hydra actually selected.
 - Fork-specific macOS keyboard, media, audio, brightness, and service behavior.
 - Continued support for upstream Hydra's encrypted relay, network-aware profiles, Unicode-aware keyboard forwarding, and headless Linux input forwarding.
+- Optional OS-aware sleep coexistence that closes the relay before suspend and reconnects after wake on macOS, Windows, and systemd Linux.
 
 ---
 

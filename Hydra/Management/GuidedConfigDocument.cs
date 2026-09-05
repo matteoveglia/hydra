@@ -68,6 +68,7 @@ internal sealed class GuidedConfigDocument
             Bool(profile, "remoteOnly", false),
             string.Equals(String(profile, "clipboardSync"), "System", StringComparison.OrdinalIgnoreCase),
             Bool(profile, "syncScreensaver", true),
+            Bool(profile, "allowSystemSleep", false),
             Bool(profile, "screenLockPropagation", false),
             Bool(profile, "accelerateMouseWheel", true),
             Bool(profile, "unicodeKeyRepeat", true),
@@ -91,6 +92,7 @@ internal sealed class GuidedConfigDocument
         profile["remoteOnly"] = fields.RemoteOnly;
         profile["clipboardSync"] = fields.UseSystemClipboard ? "System" : "Hydra";
         profile["syncScreensaver"] = fields.SyncScreensaver;
+        profile["allowSystemSleep"] = fields.AllowSystemSleep;
         profile["screenLockPropagation"] = fields.ScreenLockPropagation;
         profile["accelerateMouseWheel"] = fields.AccelerateMouseWheel;
         profile["unicodeKeyRepeat"] = fields.UnicodeKeyRepeat;
@@ -185,5 +187,5 @@ internal sealed record GuidedProfileFields(
     string? ProfileName, string Mode, string? Ssid, int? ScreenCount, bool? IsPluggedIn,
     string? NetworkConfig, string? EmbeddedServer, string? EmbeddedPassword, int? EmbeddedPort,
     string? EmbeddedServerPassword, bool HideCursor, bool RemoteOnly, bool UseSystemClipboard, bool SyncScreensaver,
-    bool ScreenLockPropagation, bool AccelerateMouseWheel, bool UnicodeKeyRepeat, decimal? MouseScale,
+    bool AllowSystemSleep, bool ScreenLockPropagation, bool AccelerateMouseWheel, bool UnicodeKeyRepeat, decimal? MouseScale,
     decimal? RelativeMouseScale, int? DeadCorners, int HostCount, int ScreenDefinitionCount);

@@ -143,6 +143,7 @@ internal static class HydraTui
         private readonly CheckBox _remoteOnly = new() { Text = "Remote Only" };
         private readonly CheckBox _systemClipboardSync = new() { Text = "Use System Clipboard" };
         private readonly CheckBox _syncScreensaver = new() { Text = "Sync Screensaver" };
+        private readonly CheckBox _allowSystemSleep = new() { Text = "Allow System Sleep" };
         private readonly CheckBox _screenLockPropagation = new() { Text = "Propagate Screen Lock" };
         private readonly CheckBox _accelerateMouseWheel = new() { Text = "Accelerate Wheel" };
         private readonly CheckBox _unicodeKeyRepeat = new() { Text = "Unicode Key Repeat" };
@@ -598,6 +599,10 @@ internal static class HydraTui
             _systemClipboardSync.Y = 0;
             behavior.Add(_systemClipboardSync);
             BindConfigHelp(_systemClipboardSync, "System Clipboard", "Off uses Hydra's cross-platform clipboard protocol. On stands down for Mac-to-Mac peers and lets Universal Clipboard handle them; Windows and Linux peers still use Hydra.");
+            _allowSystemSleep.X = 42;
+            _allowSystemSleep.Y = 2;
+            behavior.Add(_allowSystemSleep);
+            BindConfigHelp(_allowSystemSleep, "Allow System Sleep", "Ignore background activity from Hydra peers, leave the relay when conditioned displays sleep, and close the relay before OS suspend. Remote wake through Hydra is unavailable while asleep.");
 
             _advancedSummary.X = 1; _advancedSummary.Y = 12; _advancedSummary.Width = Dim.Fill(1); _advancedSummary.Height = 3;
             behavior.Add(_advancedSummary);
@@ -1028,6 +1033,7 @@ internal static class HydraTui
             SetChecked(_remoteOnly, profile.RemoteOnly);
             SetChecked(_systemClipboardSync, profile.UseSystemClipboard);
             SetChecked(_syncScreensaver, profile.SyncScreensaver);
+            SetChecked(_allowSystemSleep, profile.AllowSystemSleep);
             SetChecked(_screenLockPropagation, profile.ScreenLockPropagation);
             SetChecked(_accelerateMouseWheel, profile.AccelerateMouseWheel);
             SetChecked(_unicodeKeyRepeat, profile.UnicodeKeyRepeat);
@@ -1056,6 +1062,7 @@ internal static class HydraTui
                 IsChecked(_remoteOnly),
                 IsChecked(_systemClipboardSync),
                 IsChecked(_syncScreensaver),
+                IsChecked(_allowSystemSleep),
                 IsChecked(_screenLockPropagation),
                 IsChecked(_accelerateMouseWheel),
                 IsChecked(_unicodeKeyRepeat),
