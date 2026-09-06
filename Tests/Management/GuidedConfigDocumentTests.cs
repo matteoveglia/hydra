@@ -22,7 +22,11 @@ public class GuidedConfigDocumentTests
             """;
         var document = GuidedConfigDocument.Parse(json);
         var root = document.ReadRoot() with { Name = "after", AutoUpdate = false };
-        var profile = document.ReadProfile(0) with { Ssid = "Home WiFi", ScreenCount = 2, HideCursor = true, UseSystemClipboard = true };
+        var profile = document.ReadProfile(0) with
+        {
+            Ssid = "Home WiFi", ScreenCount = 2, HideCursor = true, UseSystemClipboard = true,
+            AllowSystemSleep = true
+        };
 
         document.WriteRoot(root);
         document.WriteProfile(0, profile);
@@ -42,6 +46,7 @@ public class GuidedConfigDocumentTests
             Assert.That(profileJson.GetProperty("conditions").GetProperty("screenCount").GetInt32(), Is.EqualTo(2));
             Assert.That(profileJson.GetProperty("hideCursor").GetBoolean(), Is.True);
             Assert.That(profileJson.GetProperty("clipboardSync").GetString(), Is.EqualTo("System"));
+            Assert.That(profileJson.GetProperty("allowSystemSleep").GetBoolean(), Is.True);
         });
     }
 
@@ -78,6 +83,25 @@ public class GuidedConfigDocumentTests
             Assert.That(system.UseSystemClipboard, Is.True);
             Assert.That(hydra.UseSystemClipboard, Is.False);
             Assert.That(parsed.RootElement.GetProperty("profiles")[0].GetProperty("clipboardSync").GetString(), Is.EqualTo("Hydra"));
+        });
+    }
+
+    [Test]
+    public void AllowSystemSleep_RoundTripsThroughBooleanToggle()
+    {
+        const string json = """{"profiles":[{"mode":"Slave","allowSystemSleep":true},{"mode":"Slave"}]}""";
+        var document = GuidedConfigDocument.Parse(json);
+
+        var enabled = document.ReadProfile(0);
+        var disabled = document.ReadProfile(1);
+        document.WriteProfile(0, enabled with { AllowSystemSleep = false });
+
+        using var parsed = System.Text.Json.JsonDocument.Parse(document.ToJson());
+        Assert.Multiple(() =>
+        {
+            Assert.That(enabled.AllowSystemSleep, Is.True);
+            Assert.That(disabled.AllowSystemSleep, Is.False);
+            Assert.That(parsed.RootElement.GetProperty("profiles")[0].GetProperty("allowSystemSleep").GetBoolean(), Is.False);
         });
     }
 

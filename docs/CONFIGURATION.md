@@ -17,6 +17,7 @@ This reference documents this fork. See the [project README](../README.md) for f
 - [Clipboard sync](#clipboard-sync)
 - [File transfer](#file-transfer)
 - [Screensaver sync](#screensaver-sync)
+- [System sleep](#system-sleep)
 - [Remote-only mode](#remote-only-mode)
 - [Networking with Styx](#networking-with-styx)
 - [Building from source](#building-from-source)
@@ -49,7 +50,7 @@ Run the TUI in a separate terminal while Hydra is running:
 
 `--config` must identify the same canonical config path as the daemon you want to manage. The TUI connects through a local-only Unix socket on macOS/Linux or a restricted named pipe on Windows; it does not expose a network management port.
 
-The views provide runtime status, the exact interface and socket selected by the live relay connection, the actual inbound interface for clients of an embedded relay, relay traffic counters, known peers and screens, bounded live logs, configuration editing, diagnostics, and keyboard help. Runtime controls include relay reconnect, confirmed Hydra restart, and confirmed Hydra shutdown; after shutdown is confirmed, **Start Hydra** becomes available. The configuration view has **Form** and **Text** modes; the active mode and form section use a persistent accent colour that is independent of keyboard or mouse focus. Form mode divides global, profile, relay, and behaviour settings into separate sections; Text mode exposes the complete JSON including hosts, neighbours, and screen definitions. Empty optional form fields show their effective inherited/default value beside the field without writing that value into the configuration. Hovering an option or moving keyboard focus to it updates the help panel at the bottom. Profile navigation is disabled at the first/last profile and when only one profile exists. Switching modes round-trips through the same document and preserves fields not shown by the form. The view uses Hydra's canonical parser and validator, detects external file changes, and writes through a validated sibling temporary file before replacing the original. **Save** changes the file only; **Save & Restart** also asks the running daemon to restart. Accepted save, reconnect, restart, and shutdown actions report progress and completion in the bottom activity line instead of blocking the refreshed UI behind a success dialog.
+The views provide runtime status, the exact interface and socket selected by the live relay connection, the actual inbound interface for clients of an embedded relay, relay traffic and send-queue diagnostics, known peers and screens, bounded live logs, configuration editing, diagnostics, and keyboard help. Runtime controls include relay reconnect, confirmed Hydra restart, and confirmed Hydra shutdown; after shutdown is confirmed, **Start Hydra** becomes available. The configuration view has **Form** and **Text** modes; the active mode and form section use a persistent accent colour that is independent of keyboard or mouse focus. Form mode divides global, profile, relay, and behaviour settings into separate sections; Text mode exposes the complete JSON including hosts, neighbours, and screen definitions. Empty optional form fields show their effective inherited/default value beside the field without writing that value into the configuration. Hovering an option or moving keyboard focus to it updates the help panel at the bottom. Profile navigation is disabled at the first/last profile and when only one profile exists. Switching modes round-trips through the same document and preserves fields not shown by the form. The view uses Hydra's canonical parser and validator, detects external file changes, and writes through a validated sibling temporary file before replacing the original. **Save** changes the file only; **Save & Restart** also asks the running daemon to restart. Accepted save, reconnect, restart, and shutdown actions report progress and completion in the bottom activity line instead of blocking the refreshed UI behind a success dialog.
 
 The Overview tab also provides a confirmed **Shutdown Hydra** action. On macOS, shutdown unloads but preserves the current LaunchAgent so its `KeepAlive` setting does not immediately relaunch Hydra. Windows service-managed sessions must instead be stopped through Windows Services or an elevated terminal.
 
@@ -108,6 +109,7 @@ Use `Esc` to close the TUI. It does not change Hydra's running state.
 - `remoteOnly` — `true` to forward all input to remote machines immediately at startup, with no local screen involved (see [Remote-only mode](#remote-only-mode))
 - `clipboardSync` — `Hydra` uses Hydra's cross-platform clipboard protocol (default). `System` makes a macOS master stand down for macOS peers so Universal Clipboard can operate without competing pasteboard writes; Hydra continues syncing with Windows and Linux peers.
 - `syncScreensaver` — `false` to disable screensaver synchronisation (default: `true`)
+- `allowSystemSleep` — `true` lets the operating system's normal idle policy put this machine fully to sleep. Hydra stops treating background peer activity as local activity, leaves the relay when a screen-count condition no longer matches, and closes the relay before OS suspend (default: `false`).
 - `screenLockPropagation` — propagate a Mac/Windows master's local lock to connected slaves (master only; default: `false`)
 - `accelerateMouseWheel` — apply the platform wheel-acceleration behavior (default: `true`)
 - `unicodeKeyRepeat` — repeat held printable keys through Unicode insertion where supported, avoiding the macOS press-and-hold accent UI (master preference; default: `true`)
@@ -377,6 +379,28 @@ When the screensaver activates on the master, Hydra:
 When the master wakes, it deactivates the screensaver on slaves and restores the cursor to the remote screen it was on before.
 
 Set `syncScreensaver: false` in a profile to disable this behaviour.
+
+## System sleep
+
+Set `allowSystemSleep: true` on a profile, or enable **Allow System Sleep** in the TUI, when the machine should follow its operating system's normal idle and suspend policy:
+
+```json
+{
+  "profiles": [
+    {
+      "profileName": "Home",
+      "mode": "Slave",
+      "allowSystemSleep": true
+    }
+  ]
+}
+```
+
+When enabled, background activity reported by other Hydra peers no longer resets this machine's local idle timer. If the active profile is conditioned on connected displays and those displays sleep or disappear, Hydra leaves the relay instead of remaining remotely wakeable. Immediately before an operating-system suspend, Hydra closes its relay connection; after resume, it reconnects automatically. On macOS, reconnection begins during the early wake phase with short bounded retries, then returns to the normal retry cadence after hardware wake completes.
+
+The pre-sleep notification is provided by IOKit on macOS, power-mode notifications on Windows, and `systemd-logind` on Linux. Linux uses a bounded delay inhibitor while Hydra closes the relay. If the platform notification service is unavailable, Hydra logs a warning and the operating system still controls whether the machine sleeps.
+
+This option intentionally disables Hydra-based remote wake while the machine is asleep. Operating-system wake sources such as Wake-on-LAN, Power Nap, network maintenance, USB devices, and scheduled wakes remain separate system settings. The default is `false` for backward compatibility and to preserve Hydra's existing always-reachable behaviour.
 
 ## Remote-only mode
 

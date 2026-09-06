@@ -532,6 +532,10 @@ internal static partial class NativeMethods
 
     [LibraryImport(IOKit)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int IOServiceClose(uint connect);
+
+    [LibraryImport(IOKit)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial int IOObjectRelease(uint obj);
 
     [LibraryImport(IOKit)]
@@ -551,6 +555,39 @@ internal static partial class NativeMethods
     internal static partial nint IORegistryEntryCreateCFProperty(uint entry, nint key, nint allocator, uint options);
 
     internal const uint KIOPMUserActiveLocal = 0;
+
+    // IOKit common power messages: err_system(0x38) | message.
+    internal const uint KIOMessageCanSystemSleep = 0xe0000270;
+    internal const uint KIOMessageSystemWillSleep = 0xe0000280;
+    internal const uint KIOMessageSystemWillPowerOn = 0xe0000320;
+    internal const uint KIOMessageSystemHasPoweredOn = 0xe0000300;
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate void IOServiceInterestCallback(nint refcon, uint service, uint messageType, nint messageArgument);
+
+    [LibraryImport(IOKit)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial uint IORegisterForSystemPower(
+        nint refcon,
+        out nint notificationPort,
+        IOServiceInterestCallback callback,
+        out uint notifier);
+
+    [LibraryImport(IOKit)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int IODeregisterForSystemPower(ref uint notifier);
+
+    [LibraryImport(IOKit)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial nint IONotificationPortGetRunLoopSource(nint notificationPort);
+
+    [LibraryImport(IOKit)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial void IONotificationPortDestroy(nint notificationPort);
+
+    [LibraryImport(IOKit)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int IOAllowPowerChange(uint kernelPort, nint notificationId);
 
     [LibraryImport(IOKit)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

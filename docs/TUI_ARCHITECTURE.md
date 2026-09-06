@@ -47,7 +47,7 @@ The principal implementation areas are:
 
 ## Local management boundary
 
-Local management uses a versioned, four-byte length-prefixed JSON protocol with a 2 MiB frame limit. The endpoint identity is derived from the canonical configuration path so multiple Hydra instances do not collide.
+Local management uses a versioned, four-byte length-prefixed JSON protocol with a 2 MiB frame limit and at most 16 active request handlers. The endpoint identity is derived from the canonical configuration path so multiple Hydra instances do not collide.
 
 - macOS and Linux use a user-private Unix socket directory and socket.
 - Windows uses a named pipe restricted to the intended local security context.
@@ -88,13 +88,15 @@ Do not expose the local IPC endpoint over the network, reuse ordinary relay pass
 
 ## Runtime and lifecycle behavior
 
-The TUI reports status, active profile, relay route, network adapters, embedded-relay peers, latency, screens, routing state, and bounded logs. Runtime controls include reconnect, restart, shutdown where supported, and a guarded start after the TUI itself confirmed shutdown.
+The TUI reports status, active profile, relay route, network adapters, embedded-relay peers, latency, send-queue depth/age, screens, routing state, and bounded logs. Runtime controls include reconnect, restart, shutdown where supported, and a guarded start after the TUI itself confirmed shutdown.
 
 Platform lifecycle behavior is intentionally different:
 
-- **macOS:** shutdown unloads but preserves the LaunchAgent; start can load the installed agent or launch the current executable.
-- **Windows:** a service-managed session child must not stop or replace the service. Stop/start remains an elevated service operation.
-- **Linux:** Hydra does not own a service installer; report direct or externally supervised operation without assuming systemd.
+- **macOS:** shutdown unloads but preserves the LaunchAgent; start can load the installed agent or launch the current executable. With **Allow System Sleep**, IOKit power notifications suspend the relay before sleep, begin reconnecting during early wake with bounded retries, and return to the normal retry cadence after hardware wake completes.
+- **Windows:** a service-managed session child must not stop or replace the service. Stop/start remains an elevated service operation. With **Allow System Sleep**, the interactive session child handles suspend/resume power notifications.
+- **Linux:** Hydra does not own a service installer; report direct or externally supervised operation without assuming systemd. With **Allow System Sleep**, Hydra uses `systemd-logind` notifications and a bounded delay inhibitor when logind is available.
+
+The sleep monitor must start after the relay and stop before it. Platform callbacks delegate to the shared sleep coordinator, bound relay shutdown work, acknowledge or release the platform sleep gate even on failure, and never let managed exceptions cross a native callback boundary.
 
 Restart, shutdown, or start changes must preserve the owning supervisor's semantics and must never create duplicate Windows session children. Routine tests must not restart an installed Hydra instance.
 

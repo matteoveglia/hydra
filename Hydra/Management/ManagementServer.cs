@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Net.Sockets;
 using System.Reflection;
@@ -20,8 +21,14 @@ internal sealed class ManagementServer(
     IServiceProvider services,
     ILogger<ManagementServer> log) : BackgroundService
 {
+    internal const int MaxConcurrentHandlers = 16;
     private readonly ManagementEndpoint _endpoint = ManagementEndpoint.ForConfig(runtime.ConfigPath);
+    private readonly SemaphoreSlim _handlerSlots = new(MaxConcurrentHandlers, MaxConcurrentHandlers);
+    private readonly ConcurrentDictionary<long, Task> _handlers = new();
     private Socket? _unixListener;
+    private long _nextHandlerId;
+
+    internal int ActiveHandlerCount => _handlers.Count;
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
         OperatingSystem.IsWindows() ? RunNamedPipeAsync(stoppingToken) : RunUnixSocketAsync(stoppingToken);
@@ -29,30 +36,40 @@ internal sealed class ManagementServer(
     [SupportedOSPlatform("windows")]
     private async Task RunNamedPipeAsync(CancellationToken cancel)
     {
-        while (!cancel.IsCancellationRequested)
+        try
         {
-            var pipe = CreateNamedPipe();
-            try
+            while (!cancel.IsCancellationRequested)
             {
-                using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-                if (RunMode.IsSessionChild) wait.CancelAfter(TimeSpan.FromSeconds(2));
+                await _handlerSlots.WaitAsync(cancel);
+                NamedPipeServerStream? pipe = null;
+                var handlerOwnsSlot = false;
                 try
                 {
-                    await pipe.WaitForConnectionAsync(wait.Token);
+                    pipe = CreateNamedPipe();
+                    using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                    if (RunMode.IsSessionChild) wait.CancelAfter(TimeSpan.FromSeconds(2));
+                    try
+                    {
+                        await pipe.WaitForConnectionAsync(wait.Token);
+                    }
+                    catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+                    {
+                        await pipe.DisposeAsync();
+                        _handlerSlots.Release();
+                        continue;
+                    }
+                    StartHandler(pipe, cancel);
+                    handlerOwnsSlot = true;
                 }
-                catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+                catch
                 {
-                    await pipe.DisposeAsync();
-                    continue;
+                    if (pipe != null) await pipe.DisposeAsync();
+                    if (!handlerOwnsSlot) _handlerSlots.Release();
+                    throw;
                 }
-                _ = HandleAndDisposeAsync(pipe, cancel);
-            }
-            catch
-            {
-                await pipe.DisposeAsync();
-                throw;
             }
         }
+        finally { await WaitForHandlersAsync(); }
     }
 
     [SupportedOSPlatform("windows")]
@@ -107,16 +124,51 @@ internal sealed class ManagementServer(
         {
             while (!cancel.IsCancellationRequested)
             {
-                var socket = await _unixListener.AcceptAsync(cancel);
-                _ = HandleAndDisposeAsync(new NetworkStream(socket, ownsSocket: true), cancel);
+                await _handlerSlots.WaitAsync(cancel);
+                try
+                {
+                    var socket = await _unixListener.AcceptAsync(cancel);
+                    StartHandler(new NetworkStream(socket, ownsSocket: true), cancel);
+                }
+                catch
+                {
+                    _handlerSlots.Release();
+                    throw;
+                }
             }
         }
         finally
         {
             _unixListener.Dispose();
             _unixListener = null;
+            await WaitForHandlersAsync();
             if (File.Exists(_endpoint.Address)) File.Delete(_endpoint.Address);
         }
+    }
+
+    private void StartHandler(Stream stream, CancellationToken serverCancel)
+    {
+        var id = Interlocked.Increment(ref _nextHandlerId);
+        var handler = HandleAndDisposeAsync(stream, serverCancel);
+        _handlers[id] = handler;
+        _ = ObserveHandlerAsync(id, handler);
+    }
+
+    private async Task ObserveHandlerAsync(long id, Task handler)
+    {
+        try { await handler; }
+        catch (Exception ex) { log.LogDebug(ex, "Management handler stopped unexpectedly"); }
+        finally
+        {
+            _handlers.TryRemove(id, out _);
+            _handlerSlots.Release();
+        }
+    }
+
+    private async Task WaitForHandlersAsync()
+    {
+        var active = _handlers.Values.ToArray();
+        if (active.Length > 0) await Task.WhenAll(active);
     }
 
     private async Task HandleAndDisposeAsync(Stream stream, CancellationToken serverCancel)
@@ -134,7 +186,9 @@ internal sealed class ManagementServer(
             catch (OperationCanceledException) when (serverCancel.IsCancellationRequested) { }
             catch (Exception ex)
             {
-                try { await ManagementFraming.WriteAsync(stream, ManagementResponse.Fail(ex.Message), CancellationToken.None); }
+                using var errorTimeout = CancellationTokenSource.CreateLinkedTokenSource(serverCancel);
+                errorTimeout.CancelAfter(TimeSpan.FromSeconds(1));
+                try { await ManagementFraming.WriteAsync(stream, ManagementResponse.Fail(ex.Message), errorTimeout.Token); }
                 catch { }
                 log.LogDebug(ex, "Management request failed");
             }

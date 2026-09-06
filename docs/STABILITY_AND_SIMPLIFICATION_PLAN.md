@@ -29,6 +29,10 @@ Every change must preserve the relevant invariants:
 - Made the TUI the only interactive configuration editor while retaining complete JSON editing.
 - Added one process-wide Linux Xlib initialization gate before every direct display open. Focused tests pass; real Xorg validation remains a named gap.
 - Established local and paired remote management with bounded framing, redaction, revision-aware apply, and automatic rollback.
+- Made output draining fault-isolated and observable, with backlog/fault telemetry and bounded shutdown that leaves native ownership with a blocked worker.
+- Made file-transfer send cleanup operation-owned so a cancelled worker cannot dispose a replacement transfer.
+- Added relative-mouse relay coalescing plus queue depth, age, peak, and send-latency diagnostics.
+- Bounded local management to 16 tracked request handlers and made error replies cancellation-bound.
 
 Completed work stays protected by regression tests and the invariants above; it should not remain in the active backlog.
 
@@ -43,10 +47,6 @@ Completed work stays protected by regression tests and the invariants above; it 
 #### Give screen-detector readiness a terminal policy
 
 `ScreenDetector.Get()` can wait indefinitely when the first native detection throws before readiness is signalled. Characterize the hosting behavior, then add cancellation/deadline and an explicit retry or terminal failure result. Do not fabricate a valid screen snapshot.
-
-#### Keep output draining observable and recoverable
-
-`CoalescingOutputWrapper` can treat an `InvalidOperationException` from a platform action like collection completion, ending the drain and dropping later events. Separate completion from action faults, add failure/block injection tests, expose the fault, and design bounded shutdown without disposing native output while a worker can still use it.
 
 #### Guarantee Windows mouse-setting recovery
 

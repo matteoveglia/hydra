@@ -6,6 +6,12 @@ public interface IRelaySender
     RelayTransportSnapshot? Transport => null;
     void Send(string[] targetHosts, byte[] payload);
     bool RequestReconnect() => false;
+    ValueTask SuspendConnectionAsync(CancellationToken cancel = default) => ValueTask.CompletedTask;
+    ValueTask SuspendForSystemSleepAsync(long generation, CancellationToken cancel = default) =>
+        SuspendConnectionAsync(cancel);
+    void ResumeConnection() { }
+    void BeginSystemWake(long generation) => ResumeConnection();
+    void CompleteSystemWake(long generation) => ResumeConnection();
     ValueTask SendReliableAsync(string[] targetHosts, byte[] payload, CancellationToken cancel = default)
     {
         cancel.ThrowIfCancellationRequested();
@@ -30,7 +36,11 @@ public sealed record RelayTransportSnapshot(
     long MessagesSent,
     long MessagesReceived,
     long BytesSent,
-    long BytesReceived);
+    long BytesReceived,
+    long SendQueueDepth,
+    long MaxSendQueueDepth,
+    long OldestQueuedMilliseconds,
+    long LastSendLatencyMilliseconds);
 
 public class NullRelaySender : IRelaySender
 {
