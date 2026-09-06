@@ -345,7 +345,6 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
             await WaitUntilConnectionResumed(cancel).ConfigureAwait(false);
             if (!TryBeginConnectionIteration()) continue;
             Interlocked.Increment(ref _connectionAttempts);
-            TimeSpan? reconnectDelay = null;
             try
             {
                 await Connect(netConfig, hostName, cancel);
@@ -360,18 +359,15 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
             }
             catch (OperationCanceledException)
             {
-                reconnectDelay = CurrentReconnectDelay();
-                log.LogWarning("Relay connection lost — retrying in {ReconnectDelay}s", reconnectDelay.Value.TotalSeconds);
+                log.LogWarning("Relay connection lost — retrying in {ReconnectDelay}s", CurrentReconnectDelay().TotalSeconds);
             }
             catch (HttpRequestException ex)
             {
-                reconnectDelay = CurrentReconnectDelay();
-                log.LogWarning("Relay connection failed — retrying in {ReconnectDelay}s: {Message}", reconnectDelay.Value.TotalSeconds, ex.InnerException?.Message ?? ex.Message);
+                log.LogWarning("Relay connection failed — retrying in {ReconnectDelay}s: {Message}", CurrentReconnectDelay().TotalSeconds, ex.InnerException?.Message ?? ex.Message);
             }
             catch (Exception ex)
             {
-                reconnectDelay = CurrentReconnectDelay();
-                log.LogError(ex, "Relay connection failed — retrying in {ReconnectDelay}s", reconnectDelay.Value.TotalSeconds);
+                log.LogError(ex, "Relay connection failed — retrying in {ReconnectDelay}s", CurrentReconnectDelay().TotalSeconds);
             }
             finally
             {
@@ -402,7 +398,9 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
 
             if (!cancel.IsCancellationRequested && !IsConnectionSuspended())
             {
-                var (delay, wakeStateVersion) = CurrentReconnectDelayState(reconnectDelay);
+                // Re-evaluate after disconnect callbacks: they can outlive the wake grace window, and a
+                // delay observed in the catch block must not keep the fast cadence alive after expiry.
+                var (delay, wakeStateVersion) = CurrentReconnectDelayState();
                 await DelayBeforeReconnect(WithJitter(delay), wakeStateVersion, cancel).ConfigureAwait(false);
             }
         }
@@ -419,13 +417,13 @@ public class RelayConnection(IHydraProfile profile, ILogger<RelayConnection> log
         }
     }
 
-    private (TimeSpan Delay, long WakeStateVersion) CurrentReconnectDelayState(TimeSpan? preferred = null)
+    private (TimeSpan Delay, long WakeStateVersion) CurrentReconnectDelayState()
     {
         lock (_connectionLock)
         {
             var delay = Stopwatch.GetTimestamp() < _fastReconnectUntil
                 ? SystemWakeReconnectDelay
-                : preferred ?? ReconnectDelay;
+                : ReconnectDelay;
             return (delay, _wakeStateVersion);
         }
     }
